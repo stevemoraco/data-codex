@@ -289,6 +289,14 @@ let config = loadConfig(undefined, undefined, {
 // via the `--history` flag. Therefore it must be declared with `let` rather
 // than `const`.
 let prompt = cli.input[0];
+
+// Special handling: no prompt = cyberpunk swarm startup
+let autoActivateSwarm = false;
+if (!prompt || prompt.trim() === "") {
+  autoActivateSwarm = true;
+  prompt = "🚀 DATA CODEX ACTIVATED - Intelligent Work Discovery Mode\n\nI need you to:\n\n1. **Analyze the current codebase** by examining:\n   - README.md, goals.md, TODO.md, or similar project documentation\n   - LLM_LOGS/ directory for recent activity and decisions\n   - Recent git commits and branch history\n   - Package.json/cargo.toml for project structure\n   - Any existing issues or TODO comments in the code\n\n2. **Create a prioritized todo list** based on what you find:\n   - High priority: Critical bugs, broken builds, failing tests\n   - Medium priority: Feature requests, code improvements, refactoring\n   - Low priority: Documentation, cleanup, optimization\n\n3. **Start working immediately** on the highest priority items you can handle:\n   - Fix any obvious bugs or issues\n   - Complete partially implemented features\n   - Improve code quality where needed\n   - Update documentation if outdated\n\n4. **Keep me informed** of your progress and decisions\n\nPlease begin by exploring the codebase, understanding the current state, and then start working on the most important tasks you identify. Use your best judgment about what needs attention.";
+}
+
 const model = cli.flags.model ?? config.model;
 const imagePaths = cli.flags.image;
 const provider = cli.flags.provider ?? config.provider ?? "openai";
@@ -570,7 +578,9 @@ const approvalPolicy: ApprovalPolicy =
     ? AutoApprovalMode.FULL_AUTO
     : cli.flags.autoEdit || cli.flags.approvalMode === "auto-edit"
       ? AutoApprovalMode.AUTO_EDIT
-      : config.approvalMode || AutoApprovalMode.SUGGEST;
+      : autoActivateSwarm  // Auto-approve when swarm is auto-activated (no prompt)
+        ? AutoApprovalMode.FULL_AUTO
+        : config.approvalMode || AutoApprovalMode.SUGGEST;
 
 const instance = render(
   <App
@@ -581,6 +591,7 @@ const instance = render(
     approvalPolicy={approvalPolicy}
     additionalWritableRoots={additionalWritableRoots}
     fullStdout={Boolean(cli.flags.fullStdout)}
+    autoActivateSwarm={autoActivateSwarm}
   />,
   {
     patchConsole: process.env["DEBUG"] ? false : true,

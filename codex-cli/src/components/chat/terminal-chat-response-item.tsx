@@ -13,6 +13,7 @@ import type { FileOpenerScheme } from "src/utils/config";
 import { useTerminalSize } from "../../hooks/use-terminal-size";
 import { collapseXmlBlocks } from "../../utils/file-tag-utils";
 import { parseToolCall, parseToolCallOutput } from "../../utils/parsers";
+import { highlightApplyPatch, highlightCode, autoHighlight } from "../../utils/syntax-highlighter";
 import chalk, { type ForegroundColorName } from "chalk";
 import { Box, Text } from "ink";
 import { parse, setOptions } from "marked";
@@ -185,6 +186,14 @@ function TerminalChatResponseToolCall({
     workdir = action.working_directory;
     cmdReadableText = formatCommandForDisplay(action.command);
   }
+  // Highlight shell command syntax
+  const highlightedCommand = useMemo(() => {
+    if (cmdReadableText) {
+      return highlightCode(cmdReadableText, 'bash');
+    }
+    return cmdReadableText;
+  }, [cmdReadableText]);
+
   return (
     <Box flexDirection="column" gap={1}>
       <Text color="magentaBright" bold>
@@ -192,7 +201,7 @@ function TerminalChatResponseToolCall({
         {workdir ? <Text dimColor>{` (${workdir})`}</Text> : ""}
       </Text>
       <Text>
-        <Text dimColor>$</Text> {cmdReadableText}
+        <Text dimColor>$ </Text>{highlightedCommand}
       </Text>
     </Box>
   );
@@ -231,24 +240,23 @@ function TerminalChatResponseToolCallOutput({
   }
 
   // -------------------------------------------------------------------------
-  // Colorize diff output: lines starting with '-' in red, '+' in green.
-  // This makes patches and other diff‑like stdout easier to read.
-  // We exclude the typical diff file headers ('---', '+++') so they retain
-  // the default color. This is a best‑effort heuristic and should be safe for
-  // non‑diff output – only the very first character of a line is inspected.
+  // Enhanced syntax highlighting with diff support
+  // Auto-detect patches, code, and apply appropriate highlighting
   // -------------------------------------------------------------------------
-  const colorizedContent = displayedContent
-    .split("\n")
-    .map((line) => {
-      if (line.startsWith("+") && !line.startsWith("++")) {
-        return chalk.green(line);
-      }
-      if (line.startsWith("-") && !line.startsWith("--")) {
-        return chalk.red(line);
-      }
-      return line;
-    })
-    .join("\n");
+  const colorizedContent = useMemo(() => {
+    // Check if this looks like a patch/diff
+    if (displayedContent.includes('*** Begin Patch') || 
+        displayedContent.includes('Update File:') ||
+        displayedContent.includes('@@') ||
+        (displayedContent.includes('+') && displayedContent.includes('-'))) {
+      return highlightApplyPatch(displayedContent);
+    }
+    
+    // Auto-highlight based on content
+    return autoHighlight(displayedContent, {
+      isCommand: message.type === 'function_call_output'
+    });
+  }, [displayedContent, message.type]);
   return (
     <Box flexDirection="column" gap={1}>
       <Text color="magenta" bold>
@@ -286,15 +294,25 @@ export function Markdown({
   const rendered = React.useMemo(() => {
     const linkifiedMarkdown = rewriteFileCitations(children, fileOpener, cwd);
 
-    // Configure marked for this specific render
+    // Configure marked with enhanced syntax highlighting
+    const terminalRenderer = new TerminalRenderer({ 
+      ...options, 
+      width: size.columns,
+      // Enhanced code block rendering
+      code: (code: string, language?: string) => {
+        const highlighted = highlightCode(code, language);
+        return `\n${highlighted}\n`;
+      }
+    });
+
     setOptions({
       // @ts-expect-error missing parser, space props
-      renderer: new TerminalRenderer({ ...options, width: size.columns }),
+      renderer: terminalRenderer,
     });
     const parsed = parse(linkifiedMarkdown, { async: false }).trim();
 
-    // Remove the truncation logic
-    return parsed;
+    // Apply additional highlighting for any remaining code patterns
+    return autoHighlight(parsed);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- options is an object of primitives
   }, [
     children,

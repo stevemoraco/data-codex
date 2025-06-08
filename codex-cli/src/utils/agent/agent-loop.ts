@@ -297,7 +297,25 @@ export class AgentLoop {
       instructions: instructions ?? "",
     };
     this.additionalWritableRoots = additionalWritableRoots;
-    this.onItem = onItem;
+    // Wrap onItem to log ALL outputs to LLM logs
+    this.onItem = async (item: ResponseItem) => {
+      try {
+        const logsManager = (await import('../llm-logs.js')).getLLMLogsManager();
+        await logsManager.logOutput({
+          id: `agent-${this.model}-${Date.now()}`,
+          model: this.model,
+          provider: this.provider || 'openai'
+        }, item, undefined, {
+          workdir: process.cwd(),
+          command: 'agent-output'
+        });
+      } catch (logError) {
+        log(`Warning: Could not log output to LLM logs: ${logError}`);
+      }
+      
+      // Call the original onItem
+      onItem(item);
+    };
     this.onLoading = onLoading;
     this.getCommandConfirmation = getCommandConfirmation;
     this.onLastResponseId = onLastResponseId;
@@ -470,6 +488,30 @@ export class AgentLoop {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     item: any,
   ): Promise<Array<ResponseInputItem>> {
+    // Log tool call to LLM logs
+    try {
+      const logsManager = (await import('../llm-logs.js')).getLLMLogsManager();
+      await logsManager.logEntry({
+        agent: {
+          id: `agent-${this.model}-${Date.now()}`,
+          model: this.model,
+          provider: this.provider || 'openai'
+        },
+        type: 'coordination',
+        content: {
+          summary: `Tool call: ${item.function?.name || 'unknown'} with args: ${JSON.stringify(item.function?.arguments || {})}`,
+          data: item
+        },
+        context: {
+          workdir: process.cwd(),
+          command: 'tool-call'
+        },
+        tags: ['tool-call', item.function?.name || 'unknown']
+      });
+    } catch (logError) {
+      log(`Warning: Could not log tool call to LLM logs: ${logError}`);
+    }
+
     // If the agent has been canceled in the meantime we should not perform any
     // additional work. Returning an empty array ensures that we neither execute
     // the requested tool call nor enqueue any follow‑up input items. This keeps
@@ -549,6 +591,23 @@ export class AgentLoop {
       if (this.terminated) {
         throw new Error("AgentLoop has been terminated");
       }
+
+      // Log ALL inputs to LLM logs for complete transparency
+      try {
+        const logsManager = (await import('../llm-logs.js')).getLLMLogsManager();
+        await logsManager.logInput({
+          id: `agent-${this.model}-${Date.now()}`,
+          model: this.model,
+          provider: this.provider || 'openai'
+        }, input, {
+          workdir: process.cwd(),
+          command: 'agent-run',
+          previousResponseId
+        });
+      } catch (logError) {
+        log(`Warning: Could not log input to LLM logs: ${logError}`);
+      }
+
       // Record when we start "thinking" so we can report accurate elapsed time.
       const thinkingStart = Date.now();
       // Bump generation so that any late events from previous runs can be

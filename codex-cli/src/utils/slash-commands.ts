@@ -33,4 +33,16 @@ export const SLASH_COMMANDS: Array<SlashCommand> = [
     description:
       "Show git diff of the working directory (or applied patches if not in git)",
   },
+  {
+    command: "/swarm",
+    description: "Toggle AI swarm mode (parallel multi-agent execution)",
+  },
+  {
+    command: "/network",
+    description: "Toggle network access on/off",
+  },
+  {
+    command: "/test",
+    description: "Run end-to-end tests for cyberpunk AI swarm workflow",
+  },
 ];

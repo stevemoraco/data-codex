@@ -94,6 +94,18 @@ export function TerminalChatCommandReview({
 
     opts.push(
       {
+        label: "🚀 Yes, and get it done with the swarm (s)",
+        value: ReviewDecision.YES_WITH_SWARM,
+      },
+      {
+        label: "🌐 Toggle network access (n)",
+        value: ReviewDecision.TOGGLE_NETWORK,
+      },
+      {
+        label: "⚡ Toggle swarm mode (w)",
+        value: ReviewDecision.TOGGLE_SWARM,
+      },
+      {
         label: "Explain this command (x)",
         value: ReviewDecision.EXPLAIN,
       },
@@ -103,11 +115,11 @@ export function TerminalChatCommandReview({
       },
       // allow switching approval mode
       {
-        label: "Switch approval mode (s)",
+        label: "Switch approval mode (m)",
         value: "switch",
       },
       {
-        label: "No, and keep going (n)",
+        label: "No, and keep going (c)",
         value: ReviewDecision.NO_CONTINUE,
       },
       {
@@ -124,18 +136,24 @@ export function TerminalChatCommandReview({
       if (mode === "select") {
         if (input === "y") {
           onReviewCommand(ReviewDecision.YES);
+        } else if (input === "s") {
+          onReviewCommand(ReviewDecision.YES_WITH_SWARM);
+        } else if (input === "n") {
+          onReviewCommand(ReviewDecision.TOGGLE_NETWORK);
+        } else if (input === "w") {
+          onReviewCommand(ReviewDecision.TOGGLE_SWARM);
         } else if (input === "x") {
           onReviewCommand(ReviewDecision.EXPLAIN);
         } else if (input === "e") {
           setMode("input");
-        } else if (input === "n") {
+        } else if (input === "c") {
           onReviewCommand(
             ReviewDecision.NO_CONTINUE,
             "Don't do that, keep going though",
           );
         } else if (input === "a" && showAlwaysApprove) {
           onReviewCommand(ReviewDecision.ALWAYS);
-        } else if (input === "s") {
+        } else if (input === "m") {
           // switch approval mode
           onSwitchApprovalMode();
         } else if (key.escape) {

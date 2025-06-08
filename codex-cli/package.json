@@ -1,9 +1,9 @@
 {
-  "name": "@openai/codex",
+  "name": "@openai/data-codex",
   "version": "0.0.0-dev",
   "license": "Apache-2.0",
   "bin": {
-    "codex": "bin/codex.js"
+    "DATA": "bin/codex.js"
   },
   "type": "module",
   "engines": {
@@ -29,6 +29,7 @@
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
     "chalk": "^5.2.0",
+    "cli-highlight": "^2.1.11",
     "diff": "^7.0.0",
     "dotenv": "^16.1.4",
     "express": "^5.1.0",
@@ -45,6 +46,7 @@
     "open": "^10.1.0",
     "openai": "^4.95.1",
     "package-manager-detector": "^1.2.0",
+    "prismjs": "^1.30.0",
     "react": "^18.2.0",
     "shell-quote": "^1.8.2",
     "strip-ansi": "^7.1.0",
@@ -58,6 +60,7 @@
     "@types/express": "^5.0.1",
     "@types/js-yaml": "^4.0.9",
     "@types/marked-terminal": "^6.1.1",
+    "@types/prismjs": "^1.26.5",
     "@types/react": "^18.0.32",
     "@types/semver": "^7.7.0",
     "@types/shell-quote": "^1.7.5",

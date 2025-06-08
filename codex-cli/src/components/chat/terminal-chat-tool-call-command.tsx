@@ -1,5 +1,6 @@
 import { parseApplyPatch } from "../../parse-apply-patch";
 import { shortenPath } from "../../utils/short-path";
+import { highlightApplyPatch, highlightCode } from "../../utils/syntax-highlighter";
 import chalk from "chalk";
 import { Text } from "ink";
 import React from "react";
@@ -11,25 +12,18 @@ export function TerminalChatToolCallCommand({
   commandForDisplay: string;
   explanation?: string;
 }): React.ReactElement {
-  // -------------------------------------------------------------------------
-  // Colorize diff output inside the command preview: we detect individual
-  // lines that begin with '+' or '-' (excluding the typical diff headers like
-  // '+++', '---', '++', '--') and apply green/red coloring.  This mirrors
-  // how Git shows diffs and makes the patch easier to review.
-  // -------------------------------------------------------------------------
-
-  const colorizedCommand = commandForDisplay
-    .split("\n")
-    .map((line) => {
-      if (line.startsWith("+") && !line.startsWith("++")) {
-        return chalk.green(line);
-      }
-      if (line.startsWith("-") && !line.startsWith("--")) {
-        return chalk.red(line);
-      }
-      return line;
-    })
-    .join("\n");
+  // Enhanced syntax highlighting for commands and patches
+  const colorizedCommand = React.useMemo(() => {
+    // Check if this is an apply_patch command
+    if (commandForDisplay.includes('apply_patch') || 
+        commandForDisplay.includes('*** Begin Patch') ||
+        commandForDisplay.includes('Update File:')) {
+      return highlightApplyPatch(commandForDisplay);
+    }
+    
+    // Otherwise highlight as shell command
+    return highlightCode(commandForDisplay, 'bash');
+  }, [commandForDisplay]);
 
   return (
     <>
@@ -128,13 +122,21 @@ export function TerminalChatToolCallApplyPatch({
     );
   }
 
+  // Highlight the patch content
+  const highlightedPatch = React.useMemo(() => {
+    return highlightApplyPatch(patch);
+  }, [patch]);
+
   return (
     <>
       <Text>
-        <Text bold>{title}</Text> <Text dimColor>{filePath}</Text>
+        <Text bold color="magenta">{title}</Text> <Text dimColor>{filePath}</Text>
       </Text>
       <Text>
-        <Text dimColor>$</Text> {commandForDisplay}
+        <Text dimColor>$ </Text>{highlightApplyPatch(commandForDisplay)}
+      </Text>
+      <Text dimColor>
+        {highlightedPatch}
       </Text>
     </>
   );

@@ -5,6 +5,15 @@ import type { AppConfig } from "../../utils/config.js";
 import type { ColorName } from "chalk";
 import type { ResponseItem } from "openai/resources/responses/responses.mjs";
 
+import { SwarmManager } from "../../swarm/swarm-manager.js";
+import { runE2ETests } from "../../swarm/e2e-tester.js";
+import { SwarmDashboard } from "../swarm/swarm-dashboard.js";
+import { SwarmControlCenter } from "../swarm/swarm-control-center.js";
+import { DynamicSwarmStartup } from "../swarm/dynamic-startup.js";
+import { NetworkStatus } from "../network/network-status.js";
+import { ThinkingIndicator } from "../thinking-indicator.js";
+import { InputQueue, type QueuedInput } from "../../utils/input-queue.js";
+
 import TerminalChatInput from "./terminal-chat-input.js";
 import TerminalChatPastRollout from "./terminal-chat-past-rollout.js";
 import { TerminalChatToolCallCommand } from "./terminal-chat-tool-call-command.js";
@@ -19,6 +28,7 @@ import { saveConfig } from "../../utils/config.js";
 import { extractAppliedPatches as _extractAppliedPatches } from "../../utils/extract-applied-patches.js";
 import { getGitDiff } from "../../utils/get-diff.js";
 import { createInputItem } from "../../utils/input-utils.js";
+import { NetworkManager } from "../../utils/network-manager.js";
 import { log } from "../../utils/logger/log.js";
 import {
   getAvailableModels,
@@ -58,6 +68,7 @@ type Props = {
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
+  autoActivateSwarm?: boolean;
 };
 
 const colorsByPolicy: Record<ApprovalPolicy, ColorName | undefined> = {
@@ -136,6 +147,7 @@ async function generateCommandExplanation(
   }
 }
 
+
 export default function TerminalChat({
   config,
   prompt: _initialPrompt,
@@ -143,6 +155,7 @@ export default function TerminalChat({
   approvalPolicy: initialApprovalPolicy,
   additionalWritableRoots,
   fullStdout,
+  autoActivateSwarm,
 }: Props): React.ReactElement {
   const notify = Boolean(config.notify);
   const [model, setModel] = useState<string>(config.model);
@@ -154,6 +167,283 @@ export default function TerminalChat({
     initialApprovalPolicy,
   );
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
+  
+  // Swarm manager state
+  const swarmManagerRef = React.useRef<SwarmManager>();
+  const [swarmEnabled, setSwarmEnabled] = useState(false);
+  
+  // Network manager state
+  const networkManagerRef = React.useRef<NetworkManager>();
+  const [networkStatus, setNetworkStatus] = useState<string>('🌐 ONLINE');
+
+  // Cyberpunk startup state
+  const [showCyberpunkStartup, setShowCyberpunkStartup] = useState(false);
+  const autoActivationTriggeredRef = React.useRef(false);
+  const startupActiveRef = React.useRef(false);
+
+  // Input queue for non-blocking input
+  const inputQueueRef = React.useRef<InputQueue>();
+  const [queueStatus, setQueueStatus] = useState({ size: 0, isProcessing: false });
+
+  // Initialize network manager and input queue
+  React.useEffect(() => {
+    if (!networkManagerRef.current) {
+      networkManagerRef.current = new NetworkManager();
+      // Set initial preset - you can customize this
+      networkManagerRef.current.presetConfigurations.dev();
+      setNetworkStatus(networkManagerRef.current.getNetworkSummary());
+    }
+
+    // Initialize input queue
+    if (!inputQueueRef.current) {
+      inputQueueRef.current = new InputQueue(async (queuedInput: QueuedInput) => {
+        // Process the queued input using agentRef
+        if (agentRef.current) {
+          await agentRef.current.run(queuedInput.input, lastResponseId || "");
+        }
+        
+        // Update queue status
+        const status = inputQueueRef.current?.getQueueStatus();
+        if (status) {
+          setQueueStatus({ size: status.size, isProcessing: status.isProcessing });
+        }
+      });
+
+      // Update queue status periodically
+      const queueStatusInterval = setInterval(() => {
+        const status = inputQueueRef.current?.getQueueStatus();
+        if (status) {
+          setQueueStatus({ size: status.size, isProcessing: status.isProcessing });
+        }
+      }, 1000);
+
+      return () => clearInterval(queueStatusInterval);
+    }
+  }, [lastResponseId]);
+
+  // Generate a session ID that can be used by both AgentLoop and SwarmManager
+  const sessionIdRef = React.useRef<string>(crypto.randomUUID());
+
+  // Toggle handlers
+  const handleToggleSwarm = React.useCallback(async () => {
+    if (!swarmManagerRef.current) {
+      // Initialize swarm manager
+      swarmManagerRef.current = new SwarmManager(
+        config,
+        approvalPolicy,
+        (item) => {
+          log(`Swarm onItem: ${JSON.stringify(item)}`);
+          setItems((prev) => {
+            const updated = uniqueById([...prev, item as ResponseItem]);
+            saveRollout(sessionIdRef.current, updated);
+            return updated;
+          });
+        },
+        setLoading
+      );
+    }
+
+    if (swarmEnabled) {
+      await swarmManagerRef.current.disable();
+      setSwarmEnabled(false);
+    } else {
+      const success = await swarmManagerRef.current.enable();
+      setSwarmEnabled(success);
+    }
+  }, [swarmEnabled, config, approvalPolicy]);
+
+  const handleRunTests = React.useCallback(async () => {
+    setLoading(true);
+    
+    // Add a test start message
+    const testStartItem: ResponseItem = {
+      id: `test-start-${Date.now()}`,
+      type: "message",
+      role: "system",
+      content: [{
+        type: "input_text",
+        text: "🧪 Starting Cyberpunk AI Swarm E2E Test Suite...\n\nThis will test all swarm features including:\n• LLM Logging System\n• Git Coordination\n• Todo Management\n• Multi-Agent Execution\n• Agent Coordination\n• Error Handling"
+      }]
+    };
+    
+    setItems((prev) => {
+      const updated = uniqueById([...prev, testStartItem]);
+      saveRollout(sessionIdRef.current, updated);
+      return updated;
+    });
+
+    try {
+      const success = await runE2ETests(config, approvalPolicy, false);
+      
+      const testResultItem: ResponseItem = {
+        id: `test-result-${Date.now()}`,
+        type: "message",
+        role: "system",
+        content: [{
+          type: "input_text",
+          text: success ? 
+            "✅ E2E Test Suite completed successfully!\n\nAll cyberpunk AI swarm features are working correctly. Check the LLM_LOGS/ directory for detailed test reports." :
+            "❌ Some E2E tests failed.\n\nCheck the LLM_LOGS/ directory for detailed test reports and troubleshooting information."
+        }]
+      };
+      
+      setItems((prev) => {
+        const updated = uniqueById([...prev, testResultItem]);
+        saveRollout(sessionIdRef.current, updated);
+        return updated;
+      });
+    } catch (error) {
+      const testErrorItem: ResponseItem = {
+        id: `test-error-${Date.now()}`,
+        type: "message",
+        role: "system",
+        content: [{
+          type: "input_text",
+          text: `❌ E2E Test Suite encountered an error: ${error}\n\nPlease check the logs for more details.`
+        }]
+      };
+      
+      setItems((prev) => {
+        const updated = uniqueById([...prev, testErrorItem]);
+        saveRollout(sessionIdRef.current, updated);
+        return updated;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [config, approvalPolicy]);
+
+  const handleToggleNetwork = React.useCallback(() => {
+    if (networkManagerRef.current) {
+      const newStatus = networkManagerRef.current.toggleNetwork();
+      setNetworkStatus(networkManagerRef.current.getNetworkSummary());
+      
+      setItems((prev) => [
+        ...prev,
+        {
+          id: `network-toggle-${Date.now()}`,
+          type: "message",
+          role: "system",
+          content: [{
+            type: "input_text",
+            text: `🌐 Network access ${newStatus ? 'enabled' : 'disabled'} - ${networkManagerRef.current?.getNetworkSummary()}`
+          }]
+        } as ResponseItem
+      ]);
+    }
+  }, []);
+
+  const handleItem = React.useCallback((item: ResponseItem) => {
+    setItems((prev) => {
+      const updated = uniqueById([...prev, item]);
+      saveRollout(sessionIdRef.current, updated);
+      return updated;
+    });
+  }, []);
+
+  const handleDataCommand = React.useCallback(async () => {
+    // Show cyberpunk startup interface (only if not already showing)
+    if (!showCyberpunkStartup && !swarmEnabled && !startupActiveRef.current) {
+      startupActiveRef.current = true;
+      setShowCyberpunkStartup(true);
+    }
+  }, [showCyberpunkStartup, swarmEnabled]);
+
+  const handleCyberpunkStartupComplete = React.useCallback(async () => {
+    // Hide cyberpunk startup
+    setShowCyberpunkStartup(false);
+    
+    // Prevent multiple executions
+    if (swarmEnabled) {
+      return;
+    }
+    
+    // Enable swarm mode
+    if (!swarmManagerRef.current) {
+      // Initialize swarm manager
+      swarmManagerRef.current = new SwarmManager(
+        config,
+        approvalPolicy,
+        (item) => {
+          log(`Swarm onItem: ${JSON.stringify(item)}`);
+          setItems((prev) => {
+            const updated = uniqueById([...prev, item as ResponseItem]);
+            saveRollout(sessionIdRef.current, updated);
+            return updated;
+          });
+        },
+        setLoading
+      );
+    }
+
+    const success = await swarmManagerRef.current.enable();
+    console.log(`🔍 Swarm enable result: ${success}, swarmEnabled will be: ${success}`);
+    setSwarmEnabled(success);
+    
+    // Create and submit the intelligent work discovery prompt
+    const intelligentPrompt = `🚀 DATA CODEX ACTIVATED - Intelligent Work Discovery Mode
+
+I need you to:
+
+1. **Analyze the current codebase** by examining:
+   - README.md, goals.md, TODO.md, or similar project documentation
+   - LLM_LOGS/ directory for recent activity and decisions
+   - Recent git commits and branch history
+   - Package.json/cargo.toml for project structure
+   - Any existing issues or TODO comments in the code
+
+2. **Create a prioritized todo list** based on what you find:
+   - High priority: Critical bugs, broken builds, failing tests
+   - Medium priority: Feature requests, code improvements, refactoring
+   - Low priority: Documentation, cleanup, optimization
+
+3. **Start working immediately** on the highest priority items you can handle:
+   - Fix any obvious bugs or issues
+   - Complete partially implemented features
+   - Improve code quality where needed
+   - Update documentation if outdated
+
+4. **Keep me informed** of your progress and decisions
+
+Please begin by exploring the codebase, understanding the current state, and then start working on the most important tasks you identify. Use your best judgment about what needs attention.`;
+
+    // Submit the intelligent prompt to the swarm
+    const inputItems = [await createInputItem(intelligentPrompt, [])];
+    
+    if (swarmEnabled && swarmManagerRef.current) {
+      await swarmManagerRef.current.executeTask(inputItems);
+    } else {
+      // Fallback to regular agent if swarm failed to activate
+      const fallbackItem: ResponseItem = {
+        id: `data-command-${Date.now()}`,
+        type: "message",
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: intelligentPrompt
+        }]
+      };
+      
+      setItems((prev) => {
+        const updated = uniqueById([...prev, fallbackItem]);
+        saveRollout(sessionIdRef.current, updated);
+        return updated;
+      });
+    }
+  }, [config, approvalPolicy, swarmEnabled]);
+
+  // Auto-activate swarm mode when requested (e.g., via no prompt)
+  React.useEffect(() => {
+    if (autoActivateSwarm && !swarmEnabled && !autoActivationTriggeredRef.current && !showCyberpunkStartup) {
+      autoActivationTriggeredRef.current = true;
+      
+      // Show cyberpunk startup first, then activate swarm
+      setShowCyberpunkStartup(true);
+      
+      // Also immediately start initializing swarm in background
+      handleToggleSwarm();
+    }
+  }, [autoActivateSwarm, swarmEnabled, showCyberpunkStartup]); // Removed handleToggleSwarm from dependencies
 
   const handleCompact = async () => {
     setLoading(true);
@@ -242,7 +532,6 @@ export default function TerminalChat({
     // Tear down any existing loop before creating a new one.
     agentRef.current?.terminate();
 
-    const sessionId = crypto.randomUUID();
     agentRef.current = new AgentLoop({
       model,
       provider,
@@ -256,7 +545,7 @@ export default function TerminalChat({
         log(`onItem: ${JSON.stringify(item)}`);
         setItems((prev) => {
           const updated = uniqueById([...prev, item as ResponseItem]);
-          saveRollout(sessionId, updated);
+          saveRollout(sessionIdRef.current, updated);
           return updated;
         });
       },
@@ -266,12 +555,66 @@ export default function TerminalChat({
         applyPatch: ApplyPatchCommand | undefined,
       ): Promise<CommandConfirmation> => {
         log(`getCommandConfirmation: ${command}`);
+        
+        // Auto-approve if swarm mode is enabled
+        if (swarmEnabled && swarmManagerRef.current?.isSwarmEnabled()) {
+          log("Auto-approving command due to swarm mode");
+          return { review: ReviewDecision.YES };
+        }
         const commandForDisplay = formatCommandForDisplay(command);
 
         // First request for confirmation
         let { decision: review, customDenyMessage } = await requestConfirmation(
           <TerminalChatToolCallCommand commandForDisplay={commandForDisplay} />,
         );
+
+        // Handle swarm decision
+        if (review === ReviewDecision.YES_WITH_SWARM) {
+          // Enable swarm via toggle handler
+          await handleToggleSwarm();
+          
+          // Return YES to allow the command to proceed normally
+          return { review: ReviewDecision.YES, customDenyMessage, applyPatch };
+        }
+
+        // Handle network toggle
+        if (review === ReviewDecision.TOGGLE_NETWORK) {
+          if (networkManagerRef.current) {
+            const newStatus = networkManagerRef.current.toggleNetwork();
+            setNetworkStatus(networkManagerRef.current.getNetworkSummary());
+            
+            // Add a system message about the network change
+            setItems((prev) => [
+              ...prev,
+              {
+                id: `network-toggle-${Date.now()}`,
+                type: "message",
+                role: "system",
+                content: [{
+                  type: "input_text",
+                  text: `🌐 Network access ${newStatus ? 'enabled' : 'disabled'} - ${networkManagerRef.current?.getNetworkSummary()}`
+                }]
+              } as ResponseItem
+            ]);
+          }
+          
+          // Ask for confirmation again after toggling network
+          const confirmResult = await requestConfirmation(
+            <TerminalChatToolCallCommand commandForDisplay={commandForDisplay} />
+          );
+          return { review: confirmResult.decision, customDenyMessage: confirmResult.customDenyMessage, applyPatch };
+        }
+
+        // Handle swarm toggle
+        if (review === ReviewDecision.TOGGLE_SWARM) {
+          await handleToggleSwarm();
+          
+          // Ask for confirmation again after toggling swarm
+          const confirmResult = await requestConfirmation(
+            <TerminalChatToolCallCommand commandForDisplay={commandForDisplay} />
+          );
+          return { review: confirmResult.decision, customDenyMessage: confirmResult.customDenyMessage, applyPatch };
+        }
 
         // If the user wants an explanation, generate one and ask again.
         if (review === ReviewDecision.EXPLAIN) {
@@ -503,9 +846,106 @@ export default function TerminalChat({
             <Text color="gray">Initializing agent…</Text>
           </Box>
         )}
+
+        {/* Dynamic Swarm Startup - replaces content during animation */}
+        {showCyberpunkStartup ? (
+          <Box key="cyberpunk-startup" marginBottom={1}>
+            <DynamicSwarmStartup 
+              onComplete={() => {
+                setShowCyberpunkStartup(false);
+                startupActiveRef.current = false;
+              }}
+              duration={4000}  // Even shorter duration to reduce conflicts
+              onItem={handleItem}
+              onDiscoveryComplete={async (discoveredTasks) => {
+                try {
+                  // Write discovered tasks to project management
+                  if (swarmManagerRef.current) {
+                    const simpleLogs = swarmManagerRef.current.getSimpleLLMLogs();
+                    
+                    // Add discovery completion task
+                    await simpleLogs.addProjectTask({
+                      title: "🎯 Work Discovery Completed",
+                      status: 'completed',
+                      priority: 'high',
+                      description: `Found ${discoveredTasks.length} tasks to work on`,
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString()
+                    });
+                    
+                    // Add each discovered task as a project task
+                    for (const task of discoveredTasks) {
+                      await simpleLogs.addProjectTask({
+                        title: task.title,
+                        status: 'pending',
+                        priority: task.priority,
+                        description: `Discovered during codebase analysis`,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                      });
+                    }
+                  }
+                  
+                  // Auto-activate swarm when discovery completes (only if not already enabled)
+                  if (!swarmEnabled) {
+                    await handleCyberpunkStartupComplete();
+                  }
+                  
+                  // Hide the startup immediately after completion
+                  setShowCyberpunkStartup(false);
+                  startupActiveRef.current = false;
+                } catch (error) {
+                  console.warn('Error handling discovery completion:', error);
+                  // Still hide the startup even if there was an error
+                  setShowCyberpunkStartup(false);
+                  startupActiveRef.current = false;
+                }
+              }}
+            />
+          </Box>
+        ) : null}
+
+        {/* Non-blocking Thinking Indicator */}
+        <ThinkingIndicator 
+          isThinking={loading}
+          thinkingSeconds={thinkingSeconds}
+          agentInfo={{
+            model: model,
+            task: swarmEnabled ? "swarm coordination" : "processing"
+          }}
+          queueInfo={queueStatus}
+        />
+
+        {/* Dashboard/Control Center - only show when startup is not active */}
+        {!showCyberpunkStartup && (
+          <>
+            {/* Debug info */}
+            {console.log(`🔍 Rendering dashboard: swarmEnabled=${swarmEnabled}, showStartup=${showCyberpunkStartup}`) || null}
+            {/* Network Status - only shown when swarm is not enabled */}
+            {!swarmEnabled && <NetworkStatus networkStatus={networkStatus} />}
+            
+            {/* Swarm Control Center - shown when swarm is enabled */}
+            {swarmEnabled ? (
+              <SwarmControlCenter 
+                swarmCoordinator={swarmManagerRef.current || null} 
+                isEnabled={swarmEnabled}
+                networkStatus={networkStatus}
+                autoApprove={swarmEnabled}
+              />
+            ) : (
+              <SwarmDashboard 
+                swarmCoordinator={swarmManagerRef.current || null} 
+                isEnabled={swarmEnabled}
+                networkStatus={networkStatus}
+                autoApprove={swarmEnabled}
+              />
+            )}
+          </>
+        )}
+        
         {overlayMode === "none" && agent && (
           <TerminalChatInput
-            loading={loading}
+            loading={false} // Never block input - always allow typing
             setItems={setItems}
             isNew={Boolean(items.length === 0)}
             setLastResponseId={setLastResponseId}
@@ -574,12 +1014,70 @@ export default function TerminalChat({
                 },
               ]);
             }}
-            submitInput={(inputs) => {
+            submitInput={async (inputs) => {
+              // ALWAYS queue input for non-blocking processing
+              if (inputQueueRef.current && inputs.length > 0) {
+                // Determine priority based on input content
+                let priority: 'low' | 'normal' | 'high' = 'normal';
+                
+                const userInput = inputs[0];
+                if (userInput && userInput.type === "message" && "role" in userInput && userInput.role === "user" && "content" in userInput && userInput.content) {
+                  const firstContent = userInput.content[0];
+                  if (firstContent && typeof firstContent === "object" && "type" in firstContent && firstContent.type === "input_text" && "text" in firstContent) {
+                    const text = firstContent.text.toLowerCase();
+                    
+                    // High priority for interrupts, commands, urgent requests
+                    if (text.includes('stop') || text.includes('cancel') || text.includes('urgent') || text.startsWith('/')) {
+                      priority = 'high';
+                    }
+                    // Low priority for follow-ups, clarifications
+                    else if (text.includes('thanks') || text.includes('ok') || text.includes('continue')) {
+                      priority = 'low';
+                    }
+                  }
+                }
+
+                // Route to swarm or queue for agent
+                if (swarmManagerRef.current && swarmEnabled) {
+                  // For swarm mode, process immediately (already non-blocking)
+                  const userInput = inputs[0];
+                  if (userInput && userInput.type === "message" && "role" in userInput && userInput.role === "user" && "content" in userInput && userInput.content) {
+                    const firstContent = userInput.content[0];
+                    if (firstContent && typeof firstContent === "object" && "type" in firstContent && firstContent.type === "input_text" && "text" in firstContent) {
+                      // Add user input to main chat for display
+                      setItems((prev) => {
+                        const updated = uniqueById([...prev, userInput as ResponseItem]);
+                        saveRollout(sessionIdRef.current, updated);
+                        return updated;
+                      });
+                      
+                      await swarmManagerRef.current.handleUserInput(firstContent.text);
+                      return {}; // Don't queue for swarm
+                    }
+                  }
+                } else {
+                  // Queue for non-blocking agent processing
+                  const queueId = inputQueueRef.current.enqueue(inputs, priority);
+                  log(`Input queued: ${queueId} (priority: ${priority})`);
+                  
+                  // Update queue status immediately
+                  const status = inputQueueRef.current.getQueueStatus();
+                  setQueueStatus({ size: status.size, isProcessing: status.isProcessing });
+                }
+                
+                return {}; // Always return empty - don't block
+              }
+              
+              // Fallback: run directly if no queue (shouldn't happen)
               agent.run(inputs, lastResponseId || "");
               return {};
             }}
             items={items}
             thinkingSeconds={thinkingSeconds}
+            onToggleSwarm={handleToggleSwarm}
+            onToggleNetwork={handleToggleNetwork}
+            onRunTests={handleRunTests}
+            onDataCommand={handleDataCommand}
           />
         )}
         {overlayMode === "history" && (

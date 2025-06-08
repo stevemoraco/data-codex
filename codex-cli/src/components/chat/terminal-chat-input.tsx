@@ -60,6 +60,10 @@ export default function TerminalChatInput({
   active,
   thinkingSeconds,
   items = [],
+  onToggleSwarm,
+  onToggleNetwork,
+  onRunTests,
+  onDataCommand,
 }: {
   isNew: boolean;
   loading: boolean;
@@ -85,6 +89,10 @@ export default function TerminalChatInput({
   thinkingSeconds: number;
   // New: current conversation items so we can include them in bug reports
   items?: Array<ResponseItem>;
+  onToggleSwarm?: () => void;
+  onToggleNetwork?: () => void;
+  onRunTests?: () => void;
+  onDataCommand?: () => void;
 }): React.ReactElement {
   // Slash command suggestion index
   const [selectedSlashSuggestion, setSelectedSlashSuggestion] =
@@ -512,6 +520,23 @@ export default function TerminalChatInput({
       } else if (inputValue.startsWith("/approval")) {
         setInput("");
         openApprovalOverlay();
+        return;
+      } else if (inputValue === "/swarm") {
+        setInput("");
+        onToggleSwarm?.();
+        return;
+      } else if (inputValue === "/network") {
+        setInput("");
+        onToggleNetwork?.();
+        return;
+      } else if (inputValue === "/test") {
+        setInput("");
+        onRunTests?.();
+        return;
+      } else if (inputValue.toLowerCase() === "data") {
+        // Magic "data" command - trigger cyberpunk startup and intelligent work discovery
+        setInput("");
+        onDataCommand?.();
         return;
       } else if (["exit", "q", ":q"].includes(inputValue)) {
         setInput("");
