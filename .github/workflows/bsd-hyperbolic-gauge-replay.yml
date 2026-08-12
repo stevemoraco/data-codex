@@ -21,18 +21,21 @@ jobs:
       - name: Check out exact replay commit
         uses: actions/checkout@v4
 
-      - name: Bootstrap exact toolchain, manifest, and mathlib cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
-            | sh -s -- -y --default-toolchain none
-          export PATH="$HOME/.elan/bin:$PATH"
-          cd formal-replay/bsd-hyperbolic-gauge
-          lake update
-          lake exe cache get
+      - name: Build, kernel-check, and independently check
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: formal-replay/bsd-hyperbolic-gauge
+          auto-config: false
+          build: true
+          test: false
+          lint: false
+          use-mathlib-cache: true
+          use-github-cache: true
+          leanchecker: true
+          nanoda: true
+          nanoda-allow-sorry: false
 
-      - name: Direct Lean source replay and axiom report
+      - name: Direct source replay and axiom report
         working-directory: formal-replay/bsd-hyperbolic-gauge
         shell: bash
         run: |
@@ -47,15 +50,3 @@ jobs:
           lean --version
           echo 'Exact mathlib revision:'
           git -C .lake/packages/mathlib rev-parse HEAD
-
-      - name: Build with Lean and independently check with nanoda
-        uses: leanprover/lean-action@v1
-        with:
-          lake-package-directory: formal-replay/bsd-hyperbolic-gauge
-          auto-config: false
-          build: true
-          test: false
-          lint: false
-          use-mathlib-cache: false
-          nanoda: true
-          nanoda-allow-sorry: false
