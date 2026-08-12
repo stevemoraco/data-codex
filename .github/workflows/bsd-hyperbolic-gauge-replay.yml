@@ -21,6 +21,16 @@ jobs:
       - name: Check out exact replay commit
         uses: actions/checkout@v4
 
+      - name: Bootstrap exact toolchain and dependency manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          export PATH="$HOME/.elan/bin:$PATH"
+          cd formal-replay/bsd-hyperbolic-gauge
+          lake update
+
       - name: Build with Lean and independently check with nanoda
         uses: leanprover/lean-action@v1
         with:
