@@ -23,8 +23,16 @@ def gauge (u : Rˣ) (x : R × R) : R × R :=
 /-- Every unit-valued diagonal gauge preserves the hyperbolic pairing. -/
 theorem gauge_preserves_hyperbolicPair (u : Rˣ) (x y : R × R) :
     hyperbolicPair (gauge u x) (gauge u y) = hyperbolicPair x y := by
-  simp [hyperbolicPair, gauge]
-  ring
+  change
+    (u : R) * x.1 * (↑(u⁻¹) : R) * y.2 +
+        (↑(u⁻¹) : R) * x.2 * (u : R) * y.1 =
+      x.1 * y.2 + x.2 * y.1
+  calc
+    (u : R) * x.1 * (↑(u⁻¹) : R) * y.2 +
+          (↑(u⁻¹) : R) * x.2 * (u : R) * y.1 =
+        ((u : R) * (↑(u⁻¹) : R)) * (x.1 * y.2 + x.2 * y.1) := by
+          ring
+    _ = x.1 * y.2 + x.2 * y.1 := by simp
 
 /-- Every unit-valued diagonal gauge preserves the positive coordinate line. -/
 theorem gauge_preserves_first_axis (u : Rˣ) (x : R) :
@@ -56,7 +64,7 @@ theorem diagonal_pairing_preserver_forces_inverse
   calc
     d = 1 * d := by simp
     _ = (a⁻¹ * a) * d := by simp
-    _ = a⁻¹ * (a * d) := by simp [mul_assoc]
+    _ = a⁻¹ * (a * d) := by simp
     _ = a⁻¹ := by rw [had]; simp
 
 /-- Pairing plus the two labelled Lagrangians has stabilizer exactly `Rˣ`. -/
@@ -69,7 +77,7 @@ theorem diagonal_pairing_preserver_iff
   · exact diagonal_pairing_preserver_forces_inverse a d
   · intro hd x y
     subst d
-    simpa [diagonalAction] using gauge_preserves_hyperbolicPair a x y
+    simpa [diagonalAction, gauge] using gauge_preserves_hyperbolicPair a x y
 
 end
 
