@@ -23,13 +23,10 @@ def gauge (u : Rˣ) (x : R × R) : R × R :=
 /-- Every unit-valued diagonal gauge preserves the hyperbolic pairing. -/
 theorem gauge_preserves_hyperbolicPair (u : Rˣ) (x y : R × R) :
     hyperbolicPair (gauge u x) (gauge u y) = hyperbolicPair x y := by
-  change
-    (u : R) * x.1 * (↑(u⁻¹) : R) * y.2 +
-        (↑(u⁻¹) : R) * x.2 * (u : R) * y.1 =
-      x.1 * y.2 + x.2 * y.1
+  dsimp [hyperbolicPair, gauge]
   calc
-    (u : R) * x.1 * (↑(u⁻¹) : R) * y.2 +
-          (↑(u⁻¹) : R) * x.2 * (u : R) * y.1 =
+    ((u : R) * x.1) * ((↑(u⁻¹) : R) * y.2) +
+          ((↑(u⁻¹) : R) * x.2) * ((u : R) * y.1) =
         ((u : R) * (↑(u⁻¹) : R)) * (x.1 * y.2 + x.2 * y.1) := by
           ring
     _ = x.1 * y.2 + x.2 * y.1 := by simp
