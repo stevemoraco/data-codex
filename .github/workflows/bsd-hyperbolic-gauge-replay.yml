@@ -9,6 +9,10 @@ on:
       - ".github/workflows/bsd-hyperbolic-gauge-replay.yml"
   workflow_dispatch:
 
+concurrency:
+  group: bsd-hyperbolic-gauge-replay
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
