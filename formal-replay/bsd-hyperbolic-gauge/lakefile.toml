@@ -1,0 +1,11 @@
+name = "BSDHyperbolicGaugeReplay"
+version = "0.1.0"
+defaultTargets = ["BSDHyperbolicGaugeReplay"]
+
+[[lean_lib]]
+name = "BSDHyperbolicGaugeReplay"
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "v4.31.0"
