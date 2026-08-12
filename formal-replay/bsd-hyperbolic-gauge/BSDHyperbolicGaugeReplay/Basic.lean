@@ -3,8 +3,8 @@ import Mathlib
 /-!
 # Hyperbolic Lagrangian gauge for signed BSD/Iwasawa local conditions
 
-Independent public replay of the formal core committed privately at
-`stevemoraco/RH-Lean@a5f5796222105e24f67ff7d34dd6b66e4c671563`.
+Independent public replay of the formal core committed privately in
+`stevemoraco/RH-Lean`, branch `bsd/hyperbolic-gauge-20260812`.
 -/
 
 namespace BSDHyperbolicGauge
@@ -94,6 +94,48 @@ theorem inverse_involution_iff_norm_one
     have hx := congrArg (fun z => u⁻¹ * z) h
     simpa [mul_assoc] using hx
 
+/-- In a uniquely 2-divisible commutative group, every norm-one element is a
+coboundary. This is the elementary Hilbert-90 mechanism behind the gauge
+obstruction. -/
+theorem norm_one_is_coboundary
+    (ι : U →* U)
+    (hsq : Function.Bijective (fun x : U => x ^ 2))
+    (u : U) (hnorm : u * ι u = 1) :
+    ∃ w : U, u = w * (ι w)⁻¹ := by
+  rcases hsq.2 u with ⟨w, hw⟩
+  have hiu : ι u = u⁻¹ :=
+    (inverse_involution_iff_norm_one ι u).2 hnorm
+  have hsquares : (ι w) ^ 2 = (w⁻¹) ^ 2 := by
+    calc
+      (ι w) ^ 2 = ι (w ^ 2) := by simp
+      _ = ι u := by rw [hw]
+      _ = u⁻¹ := hiu
+      _ = (w ^ 2)⁻¹ := by rw [hw]
+      _ = (w⁻¹) ^ 2 := by simp
+  have hiw : ι w = w⁻¹ := hsq.1 hsquares
+  refine ⟨w, ?_⟩
+  rw [hiw]
+  simpa [pow_two] using hw.symm
+
+/-- A coboundary has norm one for an involutive endomorphism. -/
+theorem coboundary_is_norm_one
+    (ι : U →* U) (hι : Function.Involutive ι) (w : U) :
+    let u := w * (ι w)⁻¹
+    u * ι u = 1 := by
+  dsimp
+  simp [hι w, mul_comm, mul_left_comm, mul_assoc]
+
+/-- Elementary Hilbert 90 for a uniquely 2-divisible commutative group. -/
+theorem norm_one_iff_coboundary
+    (ι : U →* U) (hι : Function.Involutive ι)
+    (hsq : Function.Bijective (fun x : U => x ^ 2))
+    (u : U) :
+    u * ι u = 1 ↔ ∃ w : U, u = w * (ι w)⁻¹ := by
+  constructor
+  · exact norm_one_is_coboundary ι hsq u
+  · rintro ⟨w, rfl⟩
+    exact coboundary_is_norm_one ι hι w
+
 /-- If the same residual gauge is both involution-fixed and norm one, it is
 2-torsion. -/
 theorem fixed_and_norm_one_forces_square_one
@@ -135,4 +177,5 @@ end BSDHyperbolicGauge
 #print axioms BSDHyperbolicGauge.gauge_preserves_hyperbolicPair
 #print axioms BSDHyperbolicGauge.diagonal_pairing_preserver_iff
 #print axioms BSDHyperbolicGauge.inverse_involution_iff_norm_one
+#print axioms BSDHyperbolicGauge.norm_one_iff_coboundary
 #print axioms BSDHyperbolicGauge.fixed_norm_one_is_sign
