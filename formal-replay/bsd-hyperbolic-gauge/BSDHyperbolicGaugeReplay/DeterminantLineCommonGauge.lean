@@ -10,17 +10,49 @@ variable {U : Type*} [CommGroup U]
 
 def commonGauge (u a : U) : U := u⁻¹ * a
 
+def dualGauge (u a : U) : U := u * a
+
 def relativeUnit (a b : U) : U := a * b⁻¹
 
 theorem relativeUnit_commonGauge (u a b : U) :
     relativeUnit (commonGauge u a) (commonGauge u b) =
       relativeUnit a b := by
-  simp [relativeUnit, commonGauge, mul_comm, mul_left_comm, mul_assoc]
+  dsimp [relativeUnit, commonGauge]
+  calc
+    (u⁻¹ * a) * (u⁻¹ * b)⁻¹ =
+        (u⁻¹ * u) * (a * b⁻¹) := by
+          simp only [mul_inv_rev, inv_inv]
+          ac_rfl
+    _ = a * b⁻¹ := by simp
+
+theorem product_commonGauge_dualGauge (u coordinate period : U) :
+    commonGauge u coordinate * dualGauge u period = coordinate * period := by
+  dsimp [commonGauge, dualGauge]
+  calc
+    (u⁻¹ * coordinate) * (u * period) =
+        (u⁻¹ * u) * (coordinate * period) := by ac_rfl
+    _ = coordinate * period := by simp
+
+theorem positiveInterpolation_frameInvariant
+    (u coordinate period target : U)
+    (h : coordinate * period = target) :
+    commonGauge u coordinate * dualGauge u period = target := by
+  rw [product_commonGauge_dualGauge, h]
+
+theorem negativeInterpolation_frameInvariant
+    (u coordinate oppositeCoordinate logarithm : U)
+    (h : coordinate = oppositeCoordinate * logarithm) :
+    commonGauge u coordinate = commonGauge u oppositeCoordinate * logarithm := by
+  dsimp [commonGauge]
+  rw [h]
+  simp [mul_assoc]
 
 theorem relativeUnit_independentGauge (u v a b : U) :
     relativeUnit (commonGauge u a) (commonGauge v b) =
       (u⁻¹ * v) * relativeUnit a b := by
-  simp [relativeUnit, commonGauge, mul_comm, mul_left_comm, mul_assoc]
+  dsimp [relativeUnit, commonGauge]
+  simp only [mul_inv_rev, inv_inv]
+  ac_rfl
 
 theorem commonGauge_eq_iff (u a b : U) :
     commonGauge u a = commonGauge u b ↔ a = b := by
@@ -81,7 +113,7 @@ theorem fiveTerm_discrepancy_propagates
         ac_rfl
       _ = relaxed * signedTarget := by rw [← hrelaxed]
       _ = signedDisplayed * strict := hbalance
-  exact mul_right_cancel hcancel
+  exact mul_right_cancel hcancel.symm
 
 theorem exact_relaxed_implies_exact_signed
     (relaxed signedTarget signedDisplayed strict : U)
@@ -101,8 +133,9 @@ theorem exact_signed_iff_exact_relaxed
   · intro hsigned
     have hrel := fiveTerm_relativeUnit_transport
       relaxed signedTarget signedDisplayed strict hbalance
-    rw [hsigned, relativeUnit_eq_one_iff] at hrel
-    exact (relativeUnit_eq_one_iff relaxed strict).mp hrel
+    have hrel' : relativeUnit relaxed strict = 1 := by
+      simpa [hsigned, relativeUnit] using hrel
+    exact (relativeUnit_eq_one_iff relaxed strict).mp hrel'
   · intro hrelaxed
     exact exact_relaxed_implies_exact_signed
       relaxed signedTarget signedDisplayed strict hbalance hrelaxed
@@ -112,6 +145,9 @@ end FiveTermTransport
 end BSDDeterminantLine
 
 #print axioms BSDDeterminantLine.relativeUnit_commonGauge
+#print axioms BSDDeterminantLine.product_commonGauge_dualGauge
+#print axioms BSDDeterminantLine.positiveInterpolation_frameInvariant
+#print axioms BSDDeterminantLine.negativeInterpolation_frameInvariant
 #print axioms BSDDeterminantLine.relativeUnit_independentGauge
 #print axioms BSDDeterminantLine.commonGauge_eq_iff
 #print axioms BSDDeterminantLine.relativeUnit_eq_one_iff
