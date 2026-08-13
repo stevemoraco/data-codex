@@ -74,20 +74,20 @@ theorem norm_one_is_coboundary
     (u : U) (hnorm : u * ι u = 1) :
     ∃ w : U, u = w * (ι w)⁻¹ := by
   rcases hsq.2 u with ⟨w, hw⟩
+  have hw' : w ^ 2 = u := by simpa using hw
   have hiu : ι u = u⁻¹ :=
     (inverse_involution_iff_norm_one ι u).2 hnorm
   have hsquares : (ι w) ^ 2 = (w⁻¹) ^ 2 := by
     calc
       (ι w) ^ 2 = ι (w ^ 2) := by simp
-      _ = ι u := by rw [hw]
+      _ = ι u := by rw [hw']
       _ = u⁻¹ := hiu
-      _ = (w ^ 2)⁻¹ := by
-        exact (congrArg (fun x : U => x⁻¹) hw).symm
+      _ = (w ^ 2)⁻¹ := by rw [hw']
       _ = (w⁻¹) ^ 2 := by simp
   have hiw : ι w = w⁻¹ := hsq.1 hsquares
   refine ⟨w, ?_⟩
   rw [hiw]
-  simpa [pow_two] using hw.symm
+  simpa [pow_two] using hw'.symm
 
 theorem coboundary_is_norm_one
     (ι : U →* U) (hι : Function.Involutive ι) (w : U) :
