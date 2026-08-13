@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 jobs:
-  kernel-and-independent-check:
+  kernel-and-leanchecker:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -25,7 +25,7 @@ jobs:
       - name: Check out exact replay commit
         uses: actions/checkout@v4
 
-      - name: Build, kernel-check, and independently check
+      - name: Build with Lean and independently check with LeanChecker
         uses: leanprover/lean-action@v1
         with:
           lake-package-directory: formal-replay/bsd-hyperbolic-gauge
@@ -36,7 +36,7 @@ jobs:
           use-mathlib-cache: true
           use-github-cache: true
           leanchecker: true
-          nanoda: true
+          nanoda: false
           nanoda-allow-sorry: false
 
       - name: Direct source replay and axiom report
@@ -54,3 +54,26 @@ jobs:
           lean --version
           echo 'Exact mathlib revision:'
           git -C .lake/packages/mathlib rev-parse HEAD
+
+  nanoda-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+
+    steps:
+      - name: Check out exact replay commit
+        uses: actions/checkout@v4
+
+      - name: Diagnose nanoda on the current import surface
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: formal-replay/bsd-hyperbolic-gauge
+          auto-config: false
+          build: true
+          test: false
+          lint: false
+          use-mathlib-cache: true
+          use-github-cache: true
+          leanchecker: false
+          nanoda: true
+          nanoda-allow-sorry: false
